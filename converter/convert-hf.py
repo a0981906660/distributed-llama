@@ -1,3 +1,4 @@
+# convert-hf.py
 import gc
 import json
 import sys
@@ -7,6 +8,7 @@ from safetensors import safe_open
 
 class ArchType:
     LLAMA = 0xABCD00
+    GEMMA3 = 0xABCD03
 
 def permute(tensor, nHeads: int, nKvHeads: int):
     if nHeads != nKvHeads:
@@ -29,106 +31,142 @@ class Processor:
             gc.collect()
 
     def __loadModel(self, index: int):
-        if (self.currentModelIndex == index):
+        if self.currentModelIndex == index:
             return
         self.__unloadModel()
         filePath = self.config['files'][index]
-        fileName = os.path.basename(filePath)
-        print(f'💿 Loading file {fileName}...')
+        print(f'💿 Loading {filePath}...')
         self.currentModel = safe_open(filePath, framework='pt', device='cpu')
         self.currentModelKeys = list(self.currentModel.keys())
         for key in self.currentModelKeys:
             self.layerMap[key] = index
-        print(f'Found {len(self.currentModelKeys)} layers')
         self.currentModelIndex = index
 
     def __permuteQ(self, tensor):
         return permute(tensor, self.config['n_heads'], self.config['n_heads'])
+        # return tensor
 
     def __permuteK(self, tensor):
         return permute(tensor, self.config['n_heads'], self.config['n_kv_heads'])
+        # return tensor 
 
     def __preparePlan(self):
         wt = self.config['weights_float_type']
         p = self.plan
-        p.append([FloatType.F32,
-            'model.embed_tokens.weight'])
+
+        p.append([FloatType.F32, 'language_model.model.embed_tokens.weight'])
+
         for l in range(0, self.config['n_layers']):
-            p.append([wt, self.__permuteQ,
-                f'model.layers.{l}.self_attn.q_proj.weight'])
-            p.append([wt, self.__permuteK,
-                f'model.layers.{l}.self_attn.k_proj.weight'])
-            p.append([wt,
-                f'model.layers.{l}.self_attn.v_proj.weight'])
-            p.append([wt,
-                f'model.layers.{l}.self_attn.o_proj.weight'])
+            p.append([wt, f'language_model.model.layers.{l}.self_attn.q_proj.weight'])
+            p.append([wt, f'language_model.model.layers.{l}.self_attn.k_proj.weight'])
+            p.append([wt, f'language_model.model.layers.{l}.self_attn.v_proj.weight'])
+            p.append([wt, f'language_model.model.layers.{l}.self_attn.o_proj.weight'])
 
-            if (self.config['n_experts'] > 0):
-                for e in range(self.config['n_experts']):
-                    p.append([wt,
-                        f'model.layers.{l}.block_sparse_moe.experts.{e}.w3.weight']) # up
-                    p.append([wt,
-                        f'model.layers.{l}.block_sparse_moe.experts.{e}.w1.weight']) # gate
-                    p.append([wt,
-                        f'model.layers.{l}.block_sparse_moe.experts.{e}.w2.weight']) # down
-            else:
-                p.append([wt,
-                    f'model.layers.{l}.mlp.gate_proj.weight']) # gate
-                p.append([wt,
-                    f'model.layers.{l}.mlp.down_proj.weight']) # down
-                p.append([wt,
-                    f'model.layers.{l}.mlp.up_proj.weight']) # up
+            p.append([wt, f'language_model.model.layers.{l}.mlp.gate_proj.weight'])
+            p.append([wt, f'language_model.model.layers.{l}.mlp.down_proj.weight'])
+            p.append([wt, f'language_model.model.layers.{l}.mlp.up_proj.weight'])
 
-            p.append([FloatType.F32,
-                f'model.layers.{l}.input_layernorm.weight'])
-            p.append([FloatType.F32,
-                f'model.layers.{l}.post_attention_layernorm.weight'])
-        p.append([FloatType.F32,
-            'model.norm.weight'])
-        p.append([wt,
-            'lm_head.weight', 'model.embed_tokens.weight'])
+            p.append([FloatType.F32, f'language_model.model.layers.{l}.input_layernorm.weight'])
+            p.append([FloatType.F32, f'language_model.model.layers.{l}.post_attention_layernorm.weight'])
+
+        p.append([FloatType.F32, 'language_model.model.norm.weight'])
+        p.append([wt, 'lm_head.weight', 'language_model.model.embed_tokens.weight'])
+
+
+    def ___preparePlan(self):
+        wt = self.config['weights_float_type']
+        p = self.plan
+        p.append([FloatType.F32, 'model.embed_tokens.weight'])
+        for l in range(0, self.config['n_layers']):
+            p.append([wt, self.__permuteQ, f'model.layers.{l}.self_attn.q_proj.weight'])
+            p.append([wt, self.__permuteK, f'model.layers.{l}.self_attn.k_proj.weight'])
+            p.append([wt, f'model.layers.{l}.self_attn.v_proj.weight'])
+            p.append([wt, f'model.layers.{l}.self_attn.o_proj.weight'])
+
+            p.append([wt, f'model.layers.{l}.mlp.gate_proj.weight'])
+            p.append([wt, f'model.layers.{l}.mlp.down_proj.weight'])
+            p.append([wt, f'model.layers.{l}.mlp.up_proj.weight'])
+
+            p.append([FloatType.F32, f'model.layers.{l}.input_layernorm.weight'])
+            p.append([FloatType.F32, f'model.layers.{l}.post_attention_layernorm.weight'])
+
+        p.append([FloatType.F32, 'model.norm.weight'])
+        p.append([wt, 'lm_head.weight', 'model.embed_tokens.weight'])
 
     def write(self, outputFile: str):
         self.__preparePlan()
         for planItem in self.plan:
             lookup = planItem[1:]
             transform = None
-            if (callable(lookup[0])):
+            if callable(lookup[0]):
                 transform = lookup[0]
                 lookup = lookup[1:]
 
-            if (self.currentModelIndex == None):
-                modelIndex = 0
-            else:
-                modelIndex = None
-                for layerName in lookup:
-                    if (layerName in self.layerMap):
-                        modelIndex = self.layerMap[layerName]
-                        break
-                if (modelIndex is None):
-                    modelIndex = self.currentModelIndex + 1
-            self.__loadModel(modelIndex)
-
             tensor = None
-            for layerName in lookup:
-                if (layerName in self.currentModelKeys):
-                    tensor = self.currentModel.get_tensor(layerName)
+            for modelIndex in range(len(self.config['files'])):
+                self.__loadModel(modelIndex)
+                for layerName in lookup:
+                    if layerName in self.currentModelKeys:
+                        tensor = self.currentModel.get_tensor(layerName)
+                        break
+                if tensor is not None:
                     break
+
             if tensor is None:
-                raise Exception(f'Layer {lookup[0]} not found')
-            print(f'🔶 Writing tensor {layerName} {tensor.shape}...')
+                raise Exception(f'Layer {lookup[0]} not found in any files')
+
+            print(f'🔶 Writing {layerName} {tensor.shape}...')
 
             floatType = planItem[0]
-            if (transform):
+            if transform:
+                tensor = transform(tensor)
+            
+            writeTensor(outputFile, tensor, floatType)
+
+            # Explicitly free memory immediately after writing
+            del tensor
+            gc.collect()
+
+        # Ensure model is unloaded at the end
+        self.__unloadModel()
+
+    def __write(self, outputFile: str):
+        self.__preparePlan()
+        for planItem in self.plan:
+            lookup = planItem[1:]
+            transform = None
+            if callable(lookup[0]):
+                transform = lookup[0]
+                lookup = lookup[1:]
+
+            tensor = None
+            # Iterate through all files if tensor is not yet found
+            for modelIndex in range(len(self.config['files'])):
+                self.__loadModel(modelIndex)
+                for layerName in lookup:
+                    if layerName in self.currentModelKeys:
+                        tensor = self.currentModel.get_tensor(layerName)
+                        break
+                if tensor is not None:
+                    break  # Found the tensor, exit loop
+
+            if tensor is None:
+                raise Exception(f'Layer {lookup[0]} not found in any files')
+            print(f'🔶 Writing {layerName} {tensor.shape}...')
+
+            floatType = planItem[0]
+            if transform:
                 tensor = transform(tensor)
             writeTensor(outputFile, tensor, floatType)
+
 
 def parseArchType(type: str):
     archType = {
         'llama': ArchType.LLAMA,
         'mistral': ArchType.LLAMA,
+        'gemma3': ArchType.GEMMA3,
     }.get(type)
-    if (archType is None):
+    if archType is None:
         raise Exception(f'Unsupported arch type: {type}')
     return archType
 
@@ -137,73 +175,52 @@ def parseHiddenAct(act: str):
         'gelu': 0,
         'silu': 1
     }.get(act)
-    if (hiddenAct is None):
+    if hiddenAct is None:
         raise Exception(f'Unsupported hidden act: {act}')
     return hiddenAct
 
 def parseRopeType(rt: str):
     ropeType = {
-        'llama3': 2, # LLAMA3_1
+        'llama3': 2,
+        'linear': 3,
     }.get(rt)
-    if (ropeType is None):
-        raise Exception(f'Unsupported rope type: {ropeType}')
+    if ropeType is None:
+        raise Exception(f'Unsupported rope type: {rt}')
     return ropeType
 
 def loadConfig(folderPath: str, weightsFloatType: int):
-    allFiles = os.listdir(folderPath)
-    allFiles.sort()
     with open(os.path.join(folderPath, 'config.json')) as fc:
         config = json.load(fc)
-    files = []
-    for fileName in allFiles:
-        if fileName.endswith('.safetensors') and not fileName.startswith('.'):
-            files.append(os.path.join(folderPath, fileName))
-    if (len(files) == 0):
-        raise Exception('Not found any model file')
+
+    text_cfg = config['text_config']
+    files = sorted([os.path.join(folderPath, f) for f in os.listdir(folderPath) if f.endswith('.safetensors')])
 
     result = {
         'version': 0,
         'arch_type': parseArchType(config['model_type']),
-        'hidden_act': parseHiddenAct(config['hidden_act']),
-        'dim': config['hidden_size'],
-        'hidden_dim': config['intermediate_size'],
-        'n_layers': config['num_hidden_layers'],
-        'n_heads': config['num_attention_heads'],
-        'n_kv_heads': config['num_key_value_heads'],
+        'hidden_act': 0,  # Gemma uses GELU
+        'dim': text_cfg['hidden_size'],
+        'hidden_dim': text_cfg['intermediate_size'],
+        'n_layers': text_cfg['num_hidden_layers'],
+        'n_heads': text_cfg['hidden_size'] // 128,
+        'n_kv_heads': (text_cfg['hidden_size'] // 128) // 4,
         'weights_float_type': weightsFloatType,
-        'max_seq_len': config['max_position_embeddings'],
-        'vocab_size': config['vocab_size'],
+        'max_seq_len': 4096,
+        # 'vocab_size': 256000,
+        'vocab_size': config['image_token_index'] + 1,
         'files': files,
+        'n_experts': 0,
+        'rope_scaling_factor': int(text_cfg['rope_scaling']['factor']),
+        'rope_type': parseRopeType(text_cfg['rope_scaling']['rope_type'])
     }
 
-    nExperts = config.get('num_local_experts')
-    nActiveExperts = config.get('num_active_local_experts') or config.get('num_experts_per_tok')
-    result['n_experts'] = int(nExperts) if nExperts is not None else 0
-    result['n_active_experts'] = int(nActiveExperts) if nActiveExperts is not None else 0
-
-    ropeTheta = config.get('rope_theta')
-    if (ropeTheta is not None):
-        result['rope_theta'] = int(ropeTheta)
-
-    ropeScaling = config.get('rope_scaling')
-    if (ropeScaling is not None):
-        result['rope_scaling_factor'] = int(ropeScaling['factor'])
-        result['rope_scaling_low_freq_factor'] = int(ropeScaling['low_freq_factor'])
-        result['rope_scaling_high_freq_factory'] = int(ropeScaling['high_freq_factor'])
-        result['rope_scaling_orig_max_seq_len'] = int(ropeScaling['original_max_position_embeddings'])
-        result['rope_type'] = parseRopeType(ropeScaling['rope_type'])
     return result
 
 def printUsage():
     print('Usage: python convert-hf.py <sourceFolderPath> <weightsFloatType> <name>')
-    print()
-    print('Options:')
-    print('  <sourceFolderPath> The path to the folder containing the model files')
-    print('  <weightsFloatType> The float type of the weights (e.g. "q40")')
-    print('  <name>             The name of the model (e.g. "llama3")')
 
 if __name__ == '__main__':
-    if (len(sys.argv) < 4):
+    if len(sys.argv) < 4:
         printUsage()
         exit(1)
 
@@ -213,7 +230,6 @@ if __name__ == '__main__':
     outputFileName = f'dllama_model_{name}_{sys.argv[2]}.m'
 
     print(f'Output file: {outputFileName}')
-
     config = loadConfig(sourceFolderPath, weightsFloatType)
 
     with open(outputFileName, 'wb') as outputFile:
@@ -222,3 +238,6 @@ if __name__ == '__main__':
         processor.write(outputFile)
 
     print(f'✅ {outputFileName} created successfully')
+
+# python converter/convert-hf.py /Users/chenbo/repo/huggingface/gemma-3-4b-it q40 gemma3-4b-it
+# python converter/convert-hf.py /Users/chenbo/repo/huggingface/gemma-3-4b-it f32 gemma3-4b-it
