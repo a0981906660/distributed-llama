@@ -1,0 +1,356 @@
+(venv-py39) chenbo@KQCFDQ44W2 distributed-llama % DEBUG=1 make dllama
+g++ -std=c++11 -Werror -Wformat -Werror=format-security  -march=native -mtune=native -g -fsanitize=address -c src/nn/nn-quants.cpp -o nn-quants.o
+g++ -std=c++11 -Werror -Wformat -Werror=format-security  -march=native -mtune=native -g -fsanitize=address -c src/nn/nn-core.cpp -o nn-core.o
+g++ -std=c++11 -Werror -Wformat -Werror=format-security  -march=native -mtune=native -g -fsanitize=address -c src/nn/nn-executor.cpp -o nn-executor.o
+g++ -std=c++11 -Werror -Wformat -Werror=format-security  -march=native -mtune=native -g -fsanitize=address -c src/nn/nn-network.cpp -o nn-network.o
+g++ -std=c++11 -Werror -Wformat -Werror=format-security  -march=native -mtune=native -g -fsanitize=address -c src/nn/llamafile/sgemm.cpp -o llamafile-sgemm.o
+g++ -std=c++11 -Werror -Wformat -Werror=format-security  -march=native -mtune=native -g -fsanitize=address -c src/nn/nn-cpu-ops.cpp -o nn-cpu-ops.o
+g++ -std=c++11 -Werror -Wformat -Werror=format-security  -march=native -mtune=native -g -fsanitize=address -c src/nn/nn-cpu.cpp -o nn-cpu.o
+g++ -std=c++11 -Werror -Wformat -Werror=format-security  -march=native -mtune=native -g -fsanitize=address -c src/tokenizer.cpp -o tokenizer.o
+g++ -std=c++11 -Werror -Wformat -Werror=format-security  -march=native -mtune=native -g -fsanitize=address -c src/llm.cpp -o llm.o
+g++ -std=c++11 -Werror -Wformat -Werror=format-security  -march=native -mtune=native -g -fsanitize=address -c src/app.cpp -o app.o
+g++ -std=c++11 -Werror -Wformat -Werror=format-security  -march=native -mtune=native -g -fsanitize=address src/dllama.cpp nn-quants.o nn-core.o nn-executor.o nn-network.o llamafile-sgemm.o nn-cpu-ops.o nn-cpu.o tokenizer.o llm.o app.o -o dllama -lpthread
+(venv-py39) chenbo@KQCFDQ44W2 distributed-llama % clear
+(venv-py39) chenbo@KQCFDQ44W2 distributed-llama %
+(venv-py39) chenbo@KQCFDQ44W2 distributed-llama %
+(venv-py39) chenbo@KQCFDQ44W2 distributed-llama % lldb -- ./dllama inference \
+  --model dllama_model_gemma3-4b-it_q40.m \
+  --tokenizer dllama_tokenizer_gemma3-4b-it.t \
+  --buffer-float-type q80 \
+  --prompt "Hello world"
+
+(lldb) target create "./dllama"
+Current executable set to '/Users/chenbo/repo/fork/distributed-llama/dllama' (arm64).
+(lldb) settings set -- target.run-args  "inference" "--model" "dllama_model_gemma3-4b-it_q40.m" "--tokenizer" "dllama_tokenizer_gemma3-4b-it.t" "--buffer-float-type" "q80" "--prompt" "Hello world"
+(lldb)
+(lldb) run
+Process 85767 launched: '/Users/chenbo/repo/fork/distributed-llama/dllama' (arm64)
+dllama(85767,0x2072ec840) malloc: nano zone abandoned due to inability to reserve vm space.
+📄 BosId: 2 (<bos>)
+📄 EosId: 1 (<eos>) 106 (<end_of_turn>)
+📄 RegularVocabSize: 2
+📄 SpecialVocabSize: 262143
+💡 Arch: Gemma3
+💡 HiddenAct: Gelu
+💡 Dim: 2560
+💡 KvDim: 640
+💡 HiddenDim: 10240
+💡 VocabSize: 262145
+💡 nLayers: 34
+💡 nHeads: 20
+💡 nKvHeads: 5
+💡 SeqLen: 4096
+💡 NormEpsilon: 0.000001
+💡 RopeType: Llama
+💡 RopeTheta: 10000
+📀 RequiredMemory: 5583243 kB
+🧠 CPU: neon dotprod fp16
+💿 Loading weights...
+Process 85767 stopped
+* thread #1, queue = 'com.apple.main-thread', stop reason = EXC_BAD_ACCESS (code=1, address=0x4fe80c000)
+    frame #0: 0x000000019d9b2a70 libsystem_platform.dylib`_platform_memmove + 96
+libsystem_platform.dylib`_platform_memmove:
+->  0x19d9b2a70 <+96>:  ldnp   q0, q1, [x1]
+    0x19d9b2a74 <+100>: add    x1, x1, #0x20
+    0x19d9b2a78 <+104>: subs   x2, x2, #0x20
+    0x19d9b2a7c <+108>: b.hi   0x19d9b2a68    ; <+88>
+Target 0: (dllama) stopped.
+(lldb) bt
+* thread #1, queue = 'com.apple.main-thread', stop reason = EXC_BAD_ACCESS (code=1, address=0x4fe80c000)
+  * frame #0: 0x000000019d9b2a70 libsystem_platform.dylib`_platform_memmove + 96
+    frame #1: 0x000000010071d9b0 libclang_rt.asan_osx_dynamic.dylib`__asan_memcpy + 260
+    frame #2: 0x000000010008e6c4 dllama`NnCpuDeviceSegment::loadWeight(this=0x00006030000cbd10, opIndex=4, nBytes=377488800, weight="\xb0\x9d\\\xa7E>\xdf_\U00000006\xae*XE\x87\xa5w\x9e\x9fx\x9eZJ\xa7S\xbc\xc6Y\xc5s\n\x8acTziV\xb0\U0000001fa\x88\x8f\x97EPb\xb3\x8a\x85ٕ6\xa0,G") at nn-cpu.cpp:224:5
+    frame #3: 0x00000001000200c0 dllama`NnExecutor::loadWeight(this=0x000000016fdfe8f0, name="final_matmul_logits", index=0, nBytes=377488800, weight="\xb0\x9d\\\xa7E>\xdf_\U00000006\xae*XE\x87\xa5w\x9e\x9fx\x9eZJ\xa7S\xbc\xc6Y\xc5s\n\x8acTziV\xb0\U0000001fa\x88\x8f\x97EPb\xb3\x8a\x85ٕ6\xa0,G") at nn-executor.cpp:93:26
+    frame #4: 0x0000000100039e78 dllama`NnRootWeightLoader::loadRowMatmulSlices(this=0x000000016fdfe9c0, opName="final_matmul_logits", opIndex=0, slice=0x000000016fdfe6a8, weight="\xb0\x9d\\\xa7E>\xdf_\U00000006\xae*XE\x87\xa5w\x9e\x9fx\x9eZJ\xa7S\xbc\xc6Y\xc5s\n\x8acTziV\xb0\U0000001fa\x88\x8f\x97EPb\xb3\x8a\x85ٕ6\xa0,G") at nn-network.cpp:816:19
+    frame #5: 0x00000001000c1518 dllama`loadLlmNetWeight(path="dllama_model_gemma3-4b-it_q40.m", net=0x000000016fdfe430, loader=0x000000016fdfe9c0) at llm.cpp:491:18
+    frame #6: 0x00000001000e9510 dllama`runInferenceApp(args=0x000000016fdfef20, handler=(dllama`inference(AppInferenceContext*) at dllama.cpp:11)) at app.cpp:249:5
+    frame #7: 0x0000000100003c18 dllama`main(argc=10, argv=0x000000016fdff378) at dllama.cpp:225:13
+    frame #8: 0x000000019d5fc274 dyld`start + 2840
+
+
+
+(venv-py39) chenbo@KQCFDQ44W2 distributed-llama % ./dllama inference \
+  --model dllama_model_gemma3-4b-it_f32.m \
+  --tokenizer dllama_tokenizer_gemma3-4b-it.t \
+  --buffer-float-type f32 \
+  --prompt "Hello world"
+dllama(90089,0x2072ec840) malloc: nano zone abandoned due to inability to reserve vm space.
+📄 BosId: 2 (<bos>)
+📄 EosId: 1 (<eos>) 106 (<end_of_turn>)
+📄 RegularVocabSize: 2
+📄 SpecialVocabSize: 262143
+💡 Arch: Gemma3
+💡 HiddenAct: Gelu
+💡 Dim: 2560
+💡 KvDim: 640
+💡 HiddenDim: 10240
+💡 VocabSize: 262145
+💡 nLayers: 34
+💡 nHeads: 20
+💡 nKvHeads: 5
+💡 SeqLen: 4096
+💡 NormEpsilon: 0.000001
+💡 RopeType: Llama
+💡 RopeTheta: 10000
+📀 RequiredMemory: 18682097 kB
+🧠 CPU: neon dotprod fp16
+💿 Loading weights...
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==90089==ERROR: AddressSanitizer: SEGV on unknown address 0x000b3be18000 (pc 0x00019d9b2a70 bp 0x00016d67dbc0 sp 0x00016d67d370 T0)
+==90089==The signal is caused by a READ memory access.
+    #0 0x19d9b2a70 in _platform_memmove+0x60 (libsystem_platform.dylib:arm64e+0x3a70)
+    #1 0x10280e6c0 in NnCpuDeviceSegment::loadWeight(unsigned int, unsigned long, unsigned char*) nn-cpu.cpp:224
+    #2 0x1027a00bc in NnExecutor::loadWeight(char const*, unsigned int, unsigned long, unsigned char*) nn-executor.cpp:93
+    #3 0x1027b9e74 in NnRootWeightLoader::loadRowMatmulSlices(char const*, unsigned int, NnRowMatmulSlice*, unsigned char*) nn-network.cpp:816
+    #4 0x102841514 in loadLlmNetWeight(char const*, LlmNet*, NnRootWeightLoader*) llm.cpp:491
+    #5 0x10286950c in runInferenceApp(AppCliArgs*, void (*)(AppInferenceContext*)) app.cpp:249
+    #6 0x102783c14 in main dllama.cpp:225
+    #7 0x19d5fc270  (<unknown module>)
+
+==90089==Register values:
+ x[0] = 0x000000065ec24800   x[1] = 0x0000000b3be17ff8   x[2] = 0x00000000053c1860   x[3] = 0x00000006f9865780
+ x[4] = 0x00000004425b2878   x[5] = 0x0000000000000020   x[6] = 0x000000016ce84000   x[7] = 0x0000000000000001
+ x[8] = 0x00000070dfda4e00   x[9] = 0x00000070dfda4e00  x[10] = 0x00000070dfda4e20  x[11] = 0x0000000000000000
+x[12] = 0x00000070dfda4e00  x[13] = 0x00000000028000a0  x[14] = 0x00000000028000a0  x[15] = 0x000010700001ffff
+x[16] = 0x000000019d9b2a10  x[17] = 0x00000001031985d0  x[18] = 0x0000000000000000  x[19] = 0x00000000a0002800
+x[20] = 0x0000000aa11d7078  x[21] = 0x000000065ec24800  x[22] = 0x0000000aa11d7078  x[23] = 0x0000000103b810a8
+x[24] = 0x00000000a00027bf  x[25] = 0x0000000000000000  x[26] = 0x0000000000000000  x[27] = 0x0000000000000000
+x[28] = 0x0000000000000000     fp = 0x000000016d67dbc0     lr = 0x00000001031419b0     sp = 0x000000016d67d370
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV (libsystem_platform.dylib:arm64e+0x3a70) in _platform_memmove+0x60
+==90089==ABORTING
+zsh: abort      ./dllama inference --model dllama_model_gemma3-4b-it_f32.m --tokenizer   f32
+
+
+
+
+(venv-py39) chenbo@KQCFDQ44W2 distributed-llama % ./dllama inference \
+  --model dllama_model_gemma3-4b-it_q40.m \
+  --tokenizer dllama_tokenizer_gemma3-4b-it.t \
+  --buffer-float-type q80 \
+  --prompt "Hello world"
+dllama(731,0x2072ec840) malloc: nano zone abandoned due to inability to reserve vm space.
+📄 BosId: 2 (<bos>)
+📄 EosId: 1 (<eos>) 106 (<end_of_turn>)
+📄 RegularVocabSize: 2
+📄 SpecialVocabSize: 262143
+🔪 sliceRowMatmul: nodes=1
+🔪 sliceRowMatmul: nodes=1
+🔪 sliceRowMatmul: nodes=1
+🔪 sliceRowMatmul: nodes=1
+🔪 sliceRowMatmul: nodes=1
+🔪 sliceRowMatmul: nodes=1
+WCLS Slice: nodes=1 dim=2560 vocabSize=262145 total_bytes=377488800
+💡 Arch: Gemma3
+💡 HiddenAct: Gelu
+💡 Dim: 2560
+💡 KvDim: 640
+💡 HiddenDim: 10240
+💡 VocabSize: 262145
+💡 nLayers: 34
+💡 nHeads: 20
+💡 nKvHeads: 5
+💡 SeqLen: 4096
+💡 NormEpsilon: 0.000001
+💡 RopeType: Llama
+💡 RopeTheta: 10000
+📀 RequiredMemory: 5583243 kB
+🧠 CPU: neon dotprod fp16
+💿 Loading weights...
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 3686400 bytes, fullSize: 3686400 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 921600 bytes, fullSize: 921600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+sliceSize: 14745600 bytes, fullSize: 14745600 bytes
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==731==ERROR: AddressSanitizer: SEGV on unknown address 0x000501084000 (pc 0x00019d9b2a70 bp 0x00016d5cdb60 sp 0x00016d5cd310 T0)
+==731==The signal is caused by a READ memory access.
+    #0 0x19d9b2a70 in _platform_memmove+0x60 (libsystem_platform.dylib:arm64e+0x3a70)
+    #1 0x1028be340 in NnCpuDeviceSegment::loadWeight(unsigned int, unsigned long, unsigned char*) nn-cpu.cpp:224
+    #2 0x10284fbdc in NnExecutor::loadWeight(char const*, unsigned int, unsigned long, unsigned char*) nn-executor.cpp:93
+    #3 0x102869994 in NnRootWeightLoader::loadRowMatmulSlices(char const*, unsigned int, NnRowMatmulSlice*, unsigned char*) nn-network.cpp:816
+    #4 0x1028f1304 in loadLlmNetWeight(char const*, LlmNet*, NnRootWeightLoader*) llm.cpp:493
+    #5 0x1029192fc in runInferenceApp(AppCliArgs*, void (*)(AppInferenceContext*)) app.cpp:249
+    #6 0x1028336b0 in main dllama.cpp:225
+    #7 0x19d5fc270  (<unknown module>)
+
+==731==Register values:
+ x[0] = 0x00000003c85dc800   x[1] = 0x0000000501083ff8   x[2] = 0x0000000000b3f600   x[3] = 0x00000003de29d780
+ x[4] = 0x0000000122de6878   x[5] = 0x0000000000000020   x[6] = 0x000000016cdd4000   x[7] = 0x0000000000000001
+ x[8] = 0x0000000000000000   x[9] = 0x000000707bddb9b4  x[10] = 0x000000707bddb9b4  x[11] = 0x0000000000000000
+x[12] = 0x000000707bddb9b0  x[13] = 0x00000000005a0016  x[14] = 0x00000000005a0010  x[15] = 0x000010700001ffff
+x[16] = 0x000000019d9b2a10  x[17] = 0x0000000102fd05d0  x[18] = 0x0000000000000000  x[19] = 0x00000000168005a0
+x[20] = 0x00000004eb3c3078  x[21] = 0x00000003c85dc800  x[22] = 0x00000004eb3c3078  x[23] = 0x00000001039b90a8
+x[24] = 0x000000001680055f  x[25] = 0x0000000000000000  x[26] = 0x0000000000000000  x[27] = 0x0000000000000000
+x[28] = 0x0000000000000000     fp = 0x000000016d5cdb60     lr = 0x0000000102f799b0     sp = 0x000000016d5cd310
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV (libsystem_platform.dylib:arm64e+0x3a70) in _platform_memmove+0x60
+==731==ABORTING
+zsh: abort      ./dllama inference --model dllama_model_gemma3-4b-it_q40.m --tokenizer   q80
